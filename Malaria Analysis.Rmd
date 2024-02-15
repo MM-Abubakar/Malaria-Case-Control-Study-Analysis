@@ -1,0 +1,590 @@
+---
+title: "Predictors of Malaria Infection in Military Communities: an Unmatched Case-Control
+  Study"
+author: "MM Abubakar et al"
+date: "2024-02-14"
+output: html_document
+theme: darkly
+toc_float: true
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(dplyr)
+library(tidyverse)
+library (knitr)   
+library(lmtest)   
+library(MASS)     
+library(epiR)
+library(sjPlot)
+```
+
+***This report will start by providing the abstract to the main paper***
+
+**Abstract**
+
+*Background*
+
+Efforts to control malaria in Nigeria have not resulted in the attainment of the goals of previous National Malaria Strategic Plans. Thus, Malaria remains a public health issue in Africa’s most populous country. To realise effective malaria control and elimination, Nigeria, through its recent Strategy Plan, recognises the need to utilize data from other sources rarely captured. Our study aimed to determine the predictors of malaria infections in military communities in Nigeria.  
+
+*Methods*
+
+An unmatched case-control study was conducted in military communities in Borno State, in Nigeria between July to September 2016. A total of 147 participants were enrolled, numbering 49 cases and 98 controls. Hospital data were utilized to identify cases and controls that met the inclusion criteria as well as the sociodemographic characteristics of the study population. Pre-tested questionnaires were used to collect additional possible predictors such as vector control measures and household features. Bivariate and multivariate logistic regression were used to derive crude odds ratios (OR) and adjusted ORs (aOR) respectively.
+
+
+*Results*
+
+The multivariable logistic analysis showed that sourcing *non-piped water (aOR=5.57; 95% CI: 2.09-17.31)*, *the use of Insecticide Treated Nets (aOR = 0.1; 95% CI: 0.02-0.35)* and *living in households with wooden walls or partitions (aOR = 0.11; 95% CI: 0.03-0.39)* were associated with malaria. Also, *families with sizes of 5 or more persons (aOR = 4.33; 95% CI: 1.19-20.4)* were associated with malaria infections while educational level and insecticide use were not statistically significant.
+
+*Conclusion*
+
+This study calls for a focus on water and sanitation issues, household features and the expansion of ITN use in the country in a bid to attain the main goal of the 2021 - 2025 National Malaria Strategic Plan. Our study also advocates for future Nigerian National Malaria Strategic Plans to take into consideration the peculiarities of high-risk groups such as the military especially while developing its interventions. 
+
+### 1. Introduction
+
+I will import the Malaria data set. This data set is data collected from respondents from three military barracks in
+Borno State, in Nigeria. Respondents were first identified via patient folders and additional data collected via 
+questionnaires.  In total 147 participants were enrolled for the study. From these, 49 malaria cases were identified and 98  controls selected, in a 1:2 ratio. Questionnaire was developed from the Nigerian Malaria Indicator Survey, 2015, available online. The aim of the study is to identify the predictors of malaria infection in military communities.
+Age and Sex were controlled for multivariate analysis. So, first step is setting the directory and importing the dataset.
+
+```
+setwd("~/Downloads/Cool Stuff/Project")
+
+```
+
+```{r}
+Malaria<-read.csv("MHPM Dataset Main.csv")
+```
+
+
+####   a. Observing the data frame
+
+We observed the dataframe by looking at the names of the variables in the data set, the top and bottom rows as well as the dimensions and overview.The response variable is the Last Mal Tx, capturing both the cases and controls.
+
+##### (i) *Names of the different variables.*
+
+```{r}
+names(Malaria)
+```
+
+
+##### (ii) *Last 6 rows of the dataframe.*
+
+```{r, eval=FALSE}
+tail (Malaria)
+
+```
+
+
+##### (iii) *Dimension of the dataframe.*
+```{r}
+dim(Malaria)
+```
+
+
+##### (iv) *Overview of the dataframe.*
+
+```{r, eval=FALSE}
+head (Malaria)
+```
+
+#### b. Data Cleaning
+
+We first recoded the Last Mal Tx variable to make it binary so as to depict cases and controls. 
+
+```{r}
+Malaria$outcome <- ifelse(Malaria$Last.Mal.Tx == "Case", 1, 0)
+```
+
+For variables which the folks at the Health Records department have collected in words, we recoded their elements into binary. This was done particularly for the sex, toilet type and religion variables.
+
+```{r}
+Malaria$Sex <- ifelse(Malaria$Sex == "F", 1, 0)
+Malaria$Toilet.type <- ifelse(Malaria$Toilet.type == "1", 0, 1)
+Malaria$Religion <- ifelse(Malaria$Religion == "C", 0, 1)
+```
+
+After recoding the outcome variable *(Malaria)*, we are going to convert all the independent variables to factors to take into consideration the levels. In summary, modifying the structure of the variables.
+
+```{r, eval=FALSE}
+Malaria$Age.Group<-as.factor(Malaria$Age.Group)
+Malaria$Sex<-as.factor(Malaria$Sex)
+Malaria$Religion<-as.factor(Malaria$Religion)
+Malaria$Edn.level<-as.factor(Malaria$Edn.level)
+Malaria$Door.Mat<-as.factor(Malaria$Door.Mat)
+Malaria$Drinking.H20<-as.factor(Malaria$Drinking.H20)
+Malaria$Toilet.type<-as.factor(Malaria$Toilet.type)
+Malaria$Wall.Mat<-as.factor(Malaria$Wall.Mat)
+Malaria$Insecticide.use<-as.factor(Malaria$Insecticide.use)
+Malaria$Bednet.present<-as.factor(Malaria$Bednet.present)
+Malaria$Family.Size<-as.factor(Malaria$Family.Size)
+```
+
+Time to change the structure of the outcome variable to integer.
+
+```{r}
+Malaria$outcome<-as.integer(Malaria$outcome)
+```
+
+Then, we counted the number of cases and controls
+
+```{r}
+table(Malaria$Last.Mal.Tx)
+```
+
+Finally, one quick look at the top rows of the frame to be sure cleaning is complete.
+
+```{r, eval=FALSE}
+head(Malaria)
+```
+
+###  2. Data Analysis.
+
+#### a. Mean ages (with standard deviation), median age and range of the age of the study population, all 147.
+
+```{r}
+mean(Malaria$Age)
+sd(Malaria$Age)
+median(Malaria$Age)
+range (Malaria$Age)
+```
+
+
+#### b. Median ages for cases and controls and total population
+
+***First, we filtered to arrive at a data set with only cases and its probable independent variables.***
+
+```{r}
+cases_age <- filter(Malaria, outcome == "1")
+```
+
+*Mean with the standard deviation, median and range of ages of the cases.*
+
+```{r}
+mean(cases_age$Age)
+sd(cases_age$Age)
+range(cases_age$Age)
+median(cases_age$Age)
+```
+
+***Next, we filtered the Malaria dataset to arrive at a frame with only controls and its probable independent variables.***
+
+```{r}
+controls_age<-filter(Malaria,outcome=='0')
+```
+
+*Mean with the standard deviation, median and range of ages of the controls.*
+
+```{r}
+median(controls_age$Age)
+mean(controls_age$Age)
+sd(controls_age$Age)
+range(controls_age$Age)
+```
+
+#### c. Calculate the counts of cases and controls per variable
+
+```{r}
+table(Malaria$Last.Mal.Tx, Malaria$Age.Group)
+table(Malaria$Last.Mal.Tx,Malaria$Sex)
+table(Malaria$Last.Mal.Tx,Malaria$Edn.level)
+table(Malaria$Last.Mal.Tx,Malaria$Door.Mat)
+table(Malaria$Last.Mal.Tx,Malaria$Drinking.H20)
+table(Malaria$Last.Mal.Tx,Malaria$Toilet.type)
+table(Malaria$Last.Mal.Tx,Malaria$Wall.Mat)
+table(Malaria$Last.Mal.Tx,Malaria$Insecticide.use)
+table(Malaria$Last.Mal.Tx,Malaria$Bednet.present)
+table(Malaria$Last.Mal.Tx,Malaria$Family.Size)
+table(Malaria$Last.Mal.Tx,Malaria$Religion)
+```
+
+#### d. Calculate the percentages of cases and controls per exposure variable
+
+**(i) percentages of cases and controls per age group variable.**
+
+*for cases*
+
+```{r}
+13/49 * 100
+9/49  * 100
+27/49 * 100
+```
+
+*for controls*
+
+```{r}
+26/98 * 100
+18/98 * 100
+54/98 * 100
+```
+
+**(ii)  percentages of cases and controls per sex variable**
+
+*for cases*
+
+```{r}
+18/49 * 100
+31/49 * 100
+```
+
+*for controls*
+
+```{r}
+39/98 * 100
+59/98 * 100
+```
+
+**(iii)  percentages of cases and controls per bednet variable**
+
+*for cases*
+
+```{r}
+36/49 * 100
+13/49 * 100
+```
+
+*for controls*
+
+```{r}
+27/98 * 100
+71/98 * 100
+```
+
+**(iv)  percentages of cases and controls per educational level variable**
+
+*for cases*
+
+```{r}
+21/49 * 100
+28/49 * 100
+```
+
+*for controls*
+
+```{r}
+32/98 * 100
+66/98 * 100
+```
+
+**(v)  percentages of cases and controls per door material variable**
+
+*for cases*
+
+```{r}
+19/49 * 100
+30/49 * 100
+```
+
+*for controls*
+
+```{r}
+47/98 * 100
+51/98 * 100
+```
+
+**(vi)  percentages of cases and controls per drinking water variable**
+
+*for cases*
+
+```{r}
+23/49 * 100
+26/49 * 100
+```
+
+
+*for controls*
+
+```{r}
+64/98 * 100
+34/98 * 100
+```
+
+
+**(vii)  percentages of cases and controls per toilet type variable**
+
+*for cases*
+
+```{r}
+
+30/49 * 100
+19/49 * 100
+```
+
+*for controls*
+
+```{r}
+57/98 * 100
+41/98 * 100
+```
+
+**(viii)  percentages of cases and controls per wall material variable**
+
+*for cases*
+
+```{r}
+34/49 * 100
+15/49 * 100
+
+```
+
+*for controls*
+
+```{r}
+26/98 * 100
+72/98 * 100
+```
+
+
+**(ix)   percentages of cases and controls per insecticide variables**
+
+*for cases*
+
+```{r}
+27/49 * 100
+22/49 * 100
+
+```
+
+*for controls*
+
+```{r}
+42/98 * 100
+56/98 * 100
+```
+
+**(x)  percentages of cases and controls per family size variable**
+
+*for cases*
+
+```{r}
+27/49 * 100
+22/49 * 100
+```
+
+*for controls*
+
+```{r}
+35/98 * 100
+63/98 * 100
+```
+
+**(xi)  percentages of cases and controls per religion variable**
+
+*for cases*
+
+```{r}
+20/49 * 100
+29/49 * 100
+```
+
+*for controls*
+
+```{r}
+45/98 * 100
+53/98 * 100
+```
+
+#### e. Calculate the percentages of participants that used nets, insecticides, drank piped/non-piped water, lived in houses with cement or wooden walls, used different toilet types, doorypes and educational levels.
+
+**(i)  percentages of participants per sex variable**
+
+*percentages of male participants*
+
+```{r}
+(31+59)/147 * 100
+```
+
+*percentages of female participants*
+
+```{r}
+(18+39)/147 * 100
+```
+
+**(ii) percentages of participants per bednet variable**
+
+*percentages of participants that slept under bednets*
+
+```{r}
+(13+71)/147 * 100
+```
+
+*percentages of participants without bednets*
+
+```{r}
+(36+27)/147 * 100
+```
+
+**(iii) percentages of partipants per *education status* variable**
+
+*percentages of participants with no education*
+
+```{r}
+(21+32)/147 * 100
+```
+
+*percentages of participants with some form of education*
+
+```{r}
+(28+66)/147 * 100
+```
+
+**(iv) percentages of participants per door material variable**
+
+*participants who lived in houses with metallic doors*
+
+```{r}
+(19+47)/147 * 100
+```
+
+*participants who lived in houses with wooden doors*
+
+```{r}
+(30+51)/147 * 100
+```
+
+**(v)  percentages of participants who used with piped or non-piped water source**
+
+*participants that used non-piped water*
+
+```{r}
+(26+34)/147 * 100
+```
+
+*participants that used piped water*
+
+```{r}
+(23+64)/147 * 100
+```
+
+**(vi)   percentages of participants per toilet type variable**
+
+*percentages of participants with flush toilet*
+
+```{r}
+(30+57)/147 * 100
+```
+
+*percentages of particpants with pit toilet*
+
+```{r}
+(19+41)/147 * 100
+```
+
+**(vii)  percentages of participants per wall material variable**
+
+*percentages of participants with cement wall*
+
+```{r}
+(34+26)/147 * 100
+```
+
+*percentages of participants with wooden wall*
+
+```{r}
+(15+72)/147 * 100
+```
+
+
+**(viii) percentages of respondents per insecticide variable**
+
+
+*percentages of participants who used insecticide use*
+
+```{r}
+(27+42)/147 * 100
+```
+
+*percentages of participants without insecticide use*
+
+```{r}
+(22+56)/147 * 100
+```
+
+### 3. Bivariate and Multivariate Analysis.
+
+#### a. Bivariate Analysis
+
+*We first create a 2 by 2 table for each of the predictor variable and the outcome variable.*
+
+```{r}
+table1 <- table(Malaria$Drinking.H20, Malaria$outcome)
+table2 <- table(Malaria$Religion, Malaria$outcome)
+table3 <- table(Malaria$Edn.level, Malaria$outcome)
+table4 <- table(Malaria$Toilet.type, Malaria$outcome)
+table5 <- table(Malaria$Wall.Mat, Malaria$outcome)
+table6 <- table(Malaria$Door.Mat, Malaria$outcome)
+table7 <- table(Malaria$Insecticide.use, Malaria$outcome)
+table8 <- table(Malaria$Bednet.present, Malaria$outcome)
+table9 <- table(Malaria$Family.Size, Malaria$outcome)
+```
+
+*Afterwards, we extract the Odds Ratios for each of association between the predictor and outcome variables.*
+
+```{r}
+or_water <- epi.2by2(table1, conf.level = 0.95)
+or_religion <- epi.2by2(table2, conf.level = 0.95)
+or_education <- epi.2by2(table3, conf.level = 0.95)
+or_toilet <- epi.2by2(table4, conf.level = 0.95)
+or_wall.mat <- epi.2by2(table5, conf.level = 0.95)
+or_insecticide <- epi.2by2(table7, conf.level = 0.95)
+or_bednet <- epi.2by2(table8, conf.level = 0.95)
+or_fams <- epi.2by2(table9, conf.level = 0.95)
+or_door <- epi.2by2(table6, conf.level = 0.95)
+```
+
+*A quick look at the metrics of each of the predictor variable.*
+
+```{r}
+print(or_religion )
+print(or_education )
+print(or_toilet) 
+print(or_wall.mat) 
+print(or_insecticide )
+print(or_bednet) 
+print(or_fams) 
+print(or_door)
+```
+
+*Lastly, we inspected the summaries of each of the predictor variable.*
+
+```{r, eval=FALSE}
+summary(or_water)
+summary(or_religion)
+summary(or_education)
+summary(or_toilet)
+summary(or_wall.mat)
+summary(or_insecticide)
+summary(or_bednet)
+summary(or_fams)
+summary(or_door)
+```
+
+#### b. Multivariate Analysis
+
+*We conducted the unconditional logistic regression analysis for the case-control study.*
+
+```{r}
+multi_model <- glm(outcome ~  Age.Group+Sex+ Drinking.H20+
+                     Wall.Mat+Insecticide.use+Bednet.present+Family.Size,
+                   family = binomial, data = Malaria)
+```
+
+
+*Then, a summary of the model*
+
+```{r}
+summary(multi_model)
+```
+
+*We then extracted the parameters of the model*
+
+```{r}
+tab_model(multi_model)
+```
+
+### Final Comments'
+
+First, we conducted the bivariate analysis to estimate crude odds ratios to assess the effect of predictor variables on the outcome variables. This was also used to assess for variables for the multivariate logistic regression analysis.  Multivariate logistic regression analysis considered predictor variables with p-value of <0.25 in the bivariate analysis and was used to estimate for the adjusted odds ratios of each covariate. We observed that drinking water (water source), wall material, the use of bednet and family size were associated with malaria infections.
+
+*Note: This analysis did not cover post hoc tests or earlier visualizations to appreciate the data sets. Analysis in this report only covers for main findings that went into the research paper.*
